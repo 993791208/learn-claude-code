@@ -132,12 +132,19 @@ def agent_loop(messages: list):
         # print(json.dumps(make_json_serializable(request_payload), indent=2, ensure_ascii=False))
         # print(f"\033[96m{'='*88}\033[0m\n")
 
-        # 步骤 1：发消息给大模型
-        # 我们把我是谁（SYSTEM），最近的历史聊天记录（messages），我有啥工具（TOOLS）全打包发给大模型，等待它的回复。
-        response = client.messages.create(
+        # 步骤 1：发消息给大模型（已改写为最简流式输出）
+        # 利用 Anthropic 新版的 stream 管理器，自动处理最棘手的工具块拼接
+        print("\033[92mAssistant: \033[0m", end="", flush=True)
+        with client.messages.stream(
             model=MODEL, system=SYSTEM, messages=messages,
             tools=TOOLS, max_tokens=8000,
-        )
+        ) as stream:
+            for text in stream.text_stream:
+                print(text, end="", flush=True)
+        print() # 打完字后换行
+        
+        # 退出流式上下文后，直接获取后台帮我们拼接组装好的完整的回复对象
+        response = stream.get_final_message()
         
         # 步骤 2：收到大模型的回复，将大模型的回复追加到messages消息历史中（以 Assistant 角色）
         # 这样下一次发给它时，它才能想起来自己刚才说过啥
@@ -227,13 +234,6 @@ if __name__ == "__main__":
         # 启动 Agent 循环处理用户的请求，直到大模型给出最终结果
         agent_loop(history)
         
-        # 循环结束后，获取最终大模型的回复内容
-        response_content = history[-1]["content"]
-        
-        # 如果它返回的内容分成好多段（比如图文混排），我们就把里面是纯文本（text）的段落专门拿出来
-        if isinstance(response_content, list):
-            for block in response_content:
-                if hasattr(block, "text"):
-                    # 真正呈现到你眼前的大模型回复！打印在屏幕上！
-                    print(block.text)
-        print("===============end conversation===============\n\n")
+        # （这部分删除：因为我们在上面开启了流式输出，文字已经一点点像打字机一样打印在终端上了。
+        # 这里只需要打印一个结束风格线即可。）
+        print("\n\033[36m===============end conversation===============\033[0m\n\n")

@@ -29,6 +29,7 @@ Key insight: "The agent can track its own progress -- and I can see it."
 
 import os
 import subprocess
+import readline # 用于修复终端下无法使用方向键和仅能删除一半中文字符的问题
 from pathlib import Path
 
 from anthropic import Anthropic
@@ -187,7 +188,7 @@ def agent_loop(messages: list):
                     used_todo = True
         rounds_since_todo = 0 if used_todo else rounds_since_todo + 1
         if rounds_since_todo >= 3:
-            results.insert(0, {"type": "text", "text": "<reminder>Update your todos.</reminder>"})
+            results.append({"type": "text", "text": "<reminder>Update your todos.</reminder>"})
         messages.append({"role": "user", "content": results})
 
 
