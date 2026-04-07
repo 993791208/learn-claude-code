@@ -40,7 +40,8 @@ load_dotenv(override=True)
 if os.getenv("ANTHROPIC_BASE_URL"):
     os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
 
-WORKDIR = Path.cwd()
+WORKDIR = Path.cwd() / "workspace"
+WORKDIR.mkdir(parents=True, exist_ok=True)
 client = Anthropic(base_url=os.getenv("ANTHROPIC_BASE_URL"))
 MODEL = os.environ["MODEL_ID"]
 
@@ -177,16 +178,33 @@ def agent_loop(messages: list):
         used_todo = False
         for block in response.content:
             if block.type == "tool_use":
+                print(f"\n准备调用：{block.name} \n参数: {block.input}")
                 handler = TOOL_HANDLERS.get(block.name)
                 try:
                     output = handler(**block.input) if handler else f"Unknown tool: {block.name}"
                 except Exception as e:
                     output = f"Error: {e}"
-                print(f"> {block.name}: {str(output)[:200]}")
+
+                try:
+                    output_str = str(output)
+                except Exception as e:
+                    output_str = f"Error: {e}"
+                if block.name == "todo":
+                    display_text = output_str # 对任务表一字不落
+                else:
+                    # 对于超过 400 字的系统输出，掐头去尾展示，防刷屏
+                    if len(output_str) > 400:
+                        display_text = output_str[:200] + f"\n... [省略了 {len(output_str)-400} 个字符] ...\n" + output_str[-100:]
+                    else:
+                        display_text = output_str
+                
+                print(f"> {block.name}: {display_text}")
+                # print(f"> {block.name}: {str(output)[:300]}")
                 results.append({"type": "tool_result", "tool_use_id": block.id, "content": str(output)})
                 if block.name == "todo":
                     used_todo = True
         rounds_since_todo = 0 if used_todo else rounds_since_todo + 1
+        print(f"\n当前rounds_since_todo: {rounds_since_todo}")
         if rounds_since_todo >= 3:
             results.append({"type": "text", "text": "<reminder>Update your todos.</reminder>"})
         messages.append({"role": "user", "content": results})

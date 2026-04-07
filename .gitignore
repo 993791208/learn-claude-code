@@ -229,3 +229,6 @@ analysis_progress.md
 # OS Meta files
 .DS_Store
 **/.DS_Store
+
+# Agent Workspace
+workspace/
