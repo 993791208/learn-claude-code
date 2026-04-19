@@ -170,37 +170,61 @@ class TeammateManager:
         )
         messages = [{"role": "user", "content": prompt}]
         tools = self._teammate_tools()
-        for _ in range(50):
+        is_first_run = True
+
+        while True:
+            # 1. Poll inbox
             inbox = BUS.read_inbox(name)
-            for msg in inbox:
-                messages.append({"role": "user", "content": json.dumps(msg)})
-            try:
-                response = client.messages.create(
-                    model=MODEL,
-                    system=sys_prompt,
-                    messages=messages,
-                    tools=tools,
-                    max_tokens=8000,
-                )
-            except Exception:
-                break
-            messages.append({"role": "assistant", "content": response.content})
-            if response.stop_reason != "tool_use":
-                break
-            results = []
-            for block in response.content:
-                if block.type == "tool_use":
-                    output = self._exec(name, block.name, block.input)
-                    print(f"  [{name}] {block.name}: {str(output)[:120]}")
-                    results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": str(output),
-                    })
-            messages.append({"role": "user", "content": results})
+            if inbox:
+                for msg in inbox:
+                    messages.append({"role": "user", "content": json.dumps(msg)})
+            
+            # 2. Decide if we need to call LLM
+            # We work if it's the start of the task OR we have new messages
+            if is_first_run or inbox:
+                is_first_run = False
+                self._set_status(name, "working")
+                
+                # Internal agent loop (respond to tool calls)
+                while True:
+                    try:
+                        response = client.messages.create(
+                            model=MODEL,
+                            system=sys_prompt,
+                            messages=messages,
+                            tools=tools,
+                            max_tokens=8000,
+                        )
+                    except Exception as e:
+                        print(f"  [{name}] API Error: {e}")
+                        return
+                    
+                    messages.append({"role": "assistant", "content": response.content})
+                    if response.stop_reason != "tool_use":
+                        break
+                    
+                    results = []
+                    for block in response.content:
+                        if block.type == "tool_use":
+                            output = self._exec(name, block.name, block.input)
+                            print(f"  [{name}] {block.name}: {str(output)[:120]}")
+                            results.append({
+                                "type": "tool_result",
+                                "tool_use_id": block.id,
+                                "content": str(output),
+                            })
+                    messages.append({"role": "user", "content": results})
+                
+                # Finished current round of work
+                self._set_status(name, "idle")
+
+            # 3. Sleep to avoid heavy polling
+            time.sleep(2)
+
+    def _set_status(self, name: str, status: str):
         member = self._find_member(name)
-        if member and member["status"] != "shutdown":
-            member["status"] = "idle"
+        if member:
+            member["status"] = status
             self._save_config()
 
     def _exec(self, sender: str, tool_name: str, args: dict) -> str:

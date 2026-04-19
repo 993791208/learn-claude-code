@@ -36,6 +36,7 @@ import re
 import subprocess
 import time
 from pathlib import Path
+from typing import Optional, Union, Dict, List
 
 from anthropic import Anthropic
 from dotenv import load_dotenv
@@ -45,12 +46,13 @@ load_dotenv(override=True)
 if os.getenv("ANTHROPIC_BASE_URL"):
     os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
 
-WORKDIR = Path.cwd()
+WORKDIR = Path.cwd() / "workspace"
+WORKDIR.mkdir(exist_ok=True)
 client = Anthropic(base_url=os.getenv("ANTHROPIC_BASE_URL"))
 MODEL = os.environ["MODEL_ID"]
 
 
-def detect_repo_root(cwd: Path) -> Path | None:
+def detect_repo_root(cwd: Path) -> Optional[Path]:
     """Return git repo root if cwd is inside a repo, else None."""
     try:
         r = subprocess.run(
@@ -90,9 +92,9 @@ class EventBus:
     def emit(
         self,
         event: str,
-        task: dict | None = None,
-        worktree: dict | None = None,
-        error: str | None = None,
+        task: Optional[dict] = None,
+        worktree: Optional[dict] = None,
+        error: Optional[str] = None,
     ):
         payload = {
             "event": event,
@@ -268,7 +270,7 @@ class WorktreeManager:
     def _save_index(self, data: dict):
         self.index_path.write_text(json.dumps(data, indent=2))
 
-    def _find(self, name: str) -> dict | None:
+    def _find(self, name: str) -> Optional[dict]:
         idx = self._load_index()
         for wt in idx.get("worktrees", []):
             if wt.get("name") == name:

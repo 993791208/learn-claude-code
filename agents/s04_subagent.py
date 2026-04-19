@@ -114,8 +114,9 @@ CHILD_TOOLS = [
 
 # -- Subagent: fresh context, filtered tools, summary-only return --
 def run_subagent(prompt: str) -> str:
+    print(f"\n\033[95m[Subagent] 收到新任务: {prompt[:100]}...\033[0m")
     sub_messages = [{"role": "user", "content": prompt}]  # fresh context
-    for _ in range(30):  # safety limit
+    for i in range(30):  # safety limit
         response = client.messages.create(
             model=MODEL, system=SUBAGENT_SYSTEM, messages=sub_messages,
             tools=CHILD_TOOLS, max_tokens=8000,
@@ -127,18 +128,32 @@ def run_subagent(prompt: str) -> str:
         for block in response.content:
             if block.type == "tool_use":
                 handler = TOOL_HANDLERS.get(block.name)
+                # --- 添加子智能体专属的缩进打印 ---
+                print(f"  \033[95m└─ [Subagent Tool] {block.name}\033[0m")
+                
                 output = handler(**block.input) if handler else f"Unknown tool: {block.name}"
                 results.append({"type": "tool_result", "tool_use_id": block.id, "content": str(output)[:50000]})
         sub_messages.append({"role": "user", "content": results})
-    # Only the final text returns to the parent -- child context is discarded
-    return "".join(b.text for b in response.content if hasattr(b, "text")) or "(no summary)"
+    
+    summary = "".join(b.text for b in response.content if hasattr(b, "text")) or "(no summary)"
+    print(f"\033[95m[Subagent] 任务执行完毕，正在向父级汇报总结...\033[0m\n")
+    return summary
 
 
 # -- Parent tools: base tools + task dispatcher --
 PARENT_TOOLS = CHILD_TOOLS + [
-    {"name": "task", "description": "Spawn a subagent with fresh context. It shares the filesystem but not conversation history.",
-     "input_schema": {"type": "object", "properties": {"prompt": {"type": "string"}, "description": {"type": "string", "description": "Short description of the task"}}, "required": ["prompt"]}},
-]
+    {
+    "name": "task",
+    "description": "Run a subtask in a clean context and return a summary.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "prompt": {"type": "string"}
+        },
+        "required": ["prompt"]
+    }
+}
+   ]
 
 
 def agent_loop(messages: list):

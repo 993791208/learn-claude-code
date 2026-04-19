@@ -66,8 +66,13 @@ class TaskManager:
 
     def create(self, subject: str, description: str = "") -> str:
         task = {
-            "id": self._next_id, "subject": subject, "description": description,
-            "status": "pending", "blockedBy": [], "blocks": [], "owner": "",
+            "id": self._next_id, 
+            "subject": subject, 
+            "description": description,
+            "status": "pending", 
+            "blockedBy": [], 
+            "blocks": [], 
+            "owner": "",
         }
         self._save(task)
         self._next_id += 1

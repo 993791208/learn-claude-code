@@ -75,6 +75,10 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# 创建API路由组
+from fastapi import APIRouter
+api_router = APIRouter(prefix="/api")
+
 # 创建认证服务实例
 auth_service = AuthService()
 
@@ -110,7 +114,7 @@ async def root():
     return {"message": "用户认证API服务运行中", "version": "1.0.0"}
 
 
-@app.post("/register", response_model=TokenResponse)
+@api_router.post("/register", response_model=TokenResponse)
 async def register(request: RegisterRequest, user_request: Request):
     """
     用户注册
@@ -145,7 +149,7 @@ async def register(request: RegisterRequest, user_request: Request):
     return login_result
 
 
-@app.post("/login", response_model=TokenResponse)
+@api_router.post("/login", response_model=TokenResponse)
 async def login(request: LoginRequest, user_request: Request):
     """
     用户登录
@@ -170,7 +174,7 @@ async def login(request: LoginRequest, user_request: Request):
     return result
 
 
-@app.get("/me", response_model=UserResponse)
+@api_router.get("/me", response_model=UserResponse)
 async def get_current_user_info(current_user: Dict[str, Any] = Depends(get_current_user)):
     """
     获取当前用户信息
@@ -187,7 +191,7 @@ async def get_current_user_info(current_user: Dict[str, Any] = Depends(get_curre
     return user.to_dict()
 
 
-@app.post("/change-password", response_model=MessageResponse)
+@api_router.post("/change-password", response_model=MessageResponse)
 async def change_password(
     request: ChangePasswordRequest,
     current_user: Dict[str, Any] = Depends(get_current_user)
@@ -213,13 +217,13 @@ async def change_password(
     return MessageResponse(message=message, success=True)
 
 
-@app.get("/health")
+@api_router.get("/health")
 async def health_check():
     """健康检查"""
     return {"status": "healthy", "service": "auth-api"}
 
 
-@app.get("/test-users")
+@api_router.get("/test-users")
 async def get_test_users():
     """获取测试用户信息（仅用于测试）"""
     test_users = []
@@ -244,6 +248,9 @@ async def get_test_users():
             unique_users.append(user)
     
     return {"test_users": unique_users}
+
+# 包含API路由
+app.include_router(api_router)
 
 
 if __name__ == "__main__":

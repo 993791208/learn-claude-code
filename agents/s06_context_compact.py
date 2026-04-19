@@ -38,6 +38,7 @@ import json
 import os
 import subprocess
 import time
+import readline # 用于修复终端下无法使用方向键和仅能删除一半中文字符的问题
 from pathlib import Path
 
 from anthropic import Anthropic
@@ -54,9 +55,9 @@ MODEL = os.environ["MODEL_ID"]
 
 SYSTEM = f"You are a coding agent at {WORKDIR}. Use tools to solve tasks."
 
-THRESHOLD = 50000
+THRESHOLD = 2000
 TRANSCRIPT_DIR = WORKDIR / ".transcripts"
-KEEP_RECENT = 3
+KEEP_RECENT = 1
 
 
 def estimate_tokens(messages: list) -> int:
@@ -90,6 +91,13 @@ def micro_compact(messages: list) -> list:
         if isinstance(result.get("content"), str) and len(result["content"]) > 100:
             tool_id = result.get("tool_use_id", "")
             tool_name = tool_name_map.get(tool_id, "unknown")
+            
+            # --- 添加调试打印 ---
+            old_len = len(str(result["content"]))
+            print(f"\n\033[94m[micro_compact]\033[0m 发现老旧结果 ({tool_name})，长度: {old_len} 字符")
+            print(f"\033[94m  -> 正在压缩为: [Previous: used {tool_name}]\033[0m")
+            # ------------------
+            
             result["content"] = f"[Previous: used {tool_name}]"
     return messages
 
@@ -115,10 +123,18 @@ def auto_compact(messages: list) -> list:
     )
     summary = response.content[0].text
     # Replace all messages with compressed summary
-    return [
+    new_messages = [
         {"role": "user", "content": f"[Conversation compressed. Transcript: {transcript_path}]\n\n{summary}"},
         {"role": "assistant", "content": "Understood. I have the context from the summary. Continuing."},
     ]
+    
+    # --- 添加调试打印 ---
+    print(f"\n\033[91m{'!'*20} 自动压缩完成 {'!'*20}\033[0m")
+    print(f"\033[91m新记忆概要:\033[0m\n{summary[:300]}...")
+    print(f"\033[91m{'!'*52}\033[0m\n")
+    # ------------------
+    
+    return new_messages
 
 
 # -- Tool implementations --
@@ -214,13 +230,20 @@ def agent_loop(messages: list):
                 if block.name == "compact":
                     manual_compact = True
                     output = "Compressing..."
+                    print(f"\n\033[33m> {block.name}: 正在手动触发对话压缩...\033[0m")
                 else:
                     handler = TOOL_HANDLERS.get(block.name)
+                    
+                    # --- 添加调试打印：显示工具输入参数 ---
+                    print(f"\n\033[33m[Tool Call] {block.name}\033[0m")
+                    print(f"\033[33m输入参数: {json.dumps(block.input, ensure_ascii=False)}\033[0m")
+                    # --------------------------------
+                    
                     try:
                         output = handler(**block.input) if handler else f"Unknown tool: {block.name}"
                     except Exception as e:
                         output = f"Error: {e}"
-                print(f"> {block.name}: {str(output)[:200]}")
+                    print(f"\033[32m执行结果: {str(output)[:200]}\033[0m")
                 results.append({"type": "tool_result", "tool_use_id": block.id, "content": str(output)})
         messages.append({"role": "user", "content": results})
         # Layer 3: manual compact triggered by the compact tool

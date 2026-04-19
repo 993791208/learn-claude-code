@@ -232,3 +232,6 @@ analysis_progress.md
 
 # Agent Workspace
 workspace/
+mcp-server-ts/
+mcp-server/
+.worktrees/
